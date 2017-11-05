@@ -14,7 +14,10 @@ import re
 import seaborn as sns
 from matplotlib import cm as cm
 from sklearn.ensemble import RandomForestClassifier
-
+from sklearn.grid_search import GridSearchCV
+from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score, confusion_matrix, recall_score
+from time import time
+import itertools
 
 path = 'D:/mariem/Academics/master/cours/Mini-Project'
 #Read Data
@@ -35,7 +38,39 @@ def correlation_matrix(df):
     ax.set_yticklabels(labels,fontsize=7)
     fig.colorbar(cax, ticks=[-1,-.9,-.8,-.7,-.6, -.5, -.4, -.3, -.2, -.1, 0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1])
     
-    
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=90)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')    
     
 if __name__=='__main__':
                
@@ -86,17 +121,74 @@ if __name__=='__main__':
     #studying correlation of drug-related features
     corr = (df_no_opioids.iloc[:,5:244]).corr()
     correlation_matrix(df_no_opioids.iloc[:,5:244])
-    #split our dataset into train/validation/test sets
+    
+    #split our dataset into train/test sets
     y = df_no_opioids['Opioid.Prescriber']
     X_train, X_test, y_train, y_test = train_test_split(np.array(df_no_opioids)[:,:244],
-                                np.array(y), test_size = 0.4, random_state=42)    
-    X_test, X_val, y_test, y_val = train_test_split(X_test, y_test, test_size = 0.5,
-                                                    random_state=42)
+                                np.array(y), test_size = 0.2, random_state=42)    
     
     #trying out some classification models
-    clf = RandomForestClassifier(n_estimators=150, criterion ='entropy', 
+    """clf = RandomForestClassifier(n_estimators=50, min_samples_leaf=10, criterion ='entropy', 
                                  random_state=42)
-    clf.fit(X_train, y_train)
-    y_pred = clf.predict(X_test)
-    mean_acc_score = clf.score(X_test, y_test)
+#    clf.fit(X_train, y_train)
+#    y_pred = clf.predict(X_test)
+    
+    param_grid = { 
+    'n_estimators': [100, 200, 500],
+    'min_samples_leaf': [10,20,50]
+    }
+    
+    grid_search = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 10)
+    start = time()
+    grid_search.fit(X_train, y_train)
+    print("GridSearchCV took %.2f seconds for %d candidate parameter settings."
+          % (time() - start, len(grid_search.grid_scores_)))
+    print(grid_search.best_params_)#10/100
+    """
+    opt_clf = RandomForestClassifier(n_estimators=100, min_samples_leaf=10, criterion ='entropy', 
+                                 random_state=42)
+    opt_clf.fit(X_train, y_train)
+    y_pred = opt_clf.predict(X_test)
+    # Compute confusion matrix
+    cnf_matrix = confusion_matrix(y_test, y_pred)
+    np.set_printoptions(precision=2)
+    
+    class_names = ["0","1"]
+    # Plot non-normalized confusion matrix
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=class_names,
+                          title='Confusion matrix, without normalization')
+    
+    # Plot normalized confusion matrix
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True,
+                          title='Normalized confusion matrix')
+    
+    plt.show()
+    
+    #compute AUC score
+    auc_score = roc_auc_score(y_test, y_pred)
+    print("AUC score: %.2f"%auc_score)
+    
+    #compute balanced accuracy score
+    bal_accuracy1 =recall_score(y_test,y_pred, average='macro')
+    mean_acc_score = accuracy_score(y_test,y_pred)
+    
+    fpr1, tpr1, thresholds1 = roc_curve(y_test, opt_clf.predict_proba(X_test)[:,1])
+   
+    #PLOT ROC curve
+    plt.title('Receiver Operating Characteristic')
+    plt.plot(fpr1, tpr1, 'b', label = 'AUC = %0.2f' % auc_score)
+    plt.legend(loc = 'lower right')
+    plt.plot([0, 1], [0, 1],'r--')
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.ylabel('True Positive Rate')
+    plt.xlabel('False Positive Rate')
+    plt.show()
+    
+    #analyzing feature importance
+    feature_import = opt_clf.feature_importances_
+    feature_import = np.c_[np.array(df_cols_no_opioids)[:244],feature_import]
+    feature_import = np.sort(feature_import, 0)
     
