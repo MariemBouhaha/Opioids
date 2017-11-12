@@ -15,16 +15,34 @@ import seaborn as sns
 from matplotlib import cm as cm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.grid_search import GridSearchCV
-from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score, confusion_matrix, recall_score
+from sklearn.metrics import accuracy_score, roc_curve, roc_auc_score, confusion_matrix, recall_score, precision_recall_curve, average_precision_score
 from time import time
 import itertools
+from sklearn.model_selection import validation_curve, learning_curve
 
 path = 'D:/mariem/Academics/master/cours/Mini-Project'
 #Read Data
 df=pd.read_csv(os.path.join(path, 'input','prescriber-info.csv'))
 opioids = pd.read_csv(os.path.join(path, 'input','opioids.csv'))
+overdoses = pd.read_csv(os.path.join(path, 'input','overdoses.csv'))
+
+overdoses = overdoses.apply(lambda x: x.str.replace(',',''))
+overdoses.Deaths = overdoses.Deaths.astype(int)
+overdoses.Population = overdoses.Population.astype(int)
 
 
+def OverdoseFatalities(overdoses):
+    deathRatio = (overdoses.Deaths/overdoses.Population)*100
+    temp = pd.DataFrame()
+    temp['Abbrev'] = overdoses['Abbrev']
+    temp['deathRatio'] = deathRatio
+    temp = temp.sort_values('deathRatio')
+    sns.barplot(temp.Abbrev, temp.deathRatio, color='g')
+    plt.title('Opioid Overdose Fatalities Percentage per State')
+    plt.xlabel('State')
+    plt.xticks(rotation=80)
+    plt.ylabel('Overdose Death Percentage')
+    
 def correlation_matrix(df):
 
     fig = plt.figure()
@@ -71,7 +89,41 @@ def plot_confusion_matrix(cm, classes,
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')    
-    
+
+def plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,
+                        n_jobs=1, train_sizes=np.linspace(.1, 1.0, 5)):
+    """
+    Generate a simple plot of the test and traning learning curve.
+
+    """
+    plt.figure()
+    plt.title(title)
+    if ylim is not None:
+        plt.ylim(*ylim)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1,
+                     color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+             label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+             label="Cross-validation score")
+
+    plt.legend(loc="best")
+    return plt
+
+
 if __name__=='__main__':
                
     #summary statistics of our dataset
@@ -94,13 +146,22 @@ if __name__=='__main__':
     sns.countplot(x="Opioid.Prescriber", data= df, order = df['Opioid.Prescriber'].value_counts().index, 
                   palette="RdBu")
     
-    #replace the least frequent states by a new category "other"
-    freq_state = df['State'].value_counts()
-    least_frequent=list(freq_state[freq_state<10].index)
+    #Most Comon specialies to opioid prescribers
+    opSpec = df['Specialty'].loc[df['Opioid.Prescriber']==1]
+    most_freq_opSpec = opSpec.value_counts()
+    
+    #replace the least frequent states and specialties by a new category "other"
     df_copy = df
-    for lf in least_frequent:
+    freq_state = df['State'].value_counts()
+    least_frequent_st=list(freq_state[freq_state<10].index)
+    for lf in least_frequent_st:
         df_copy['State'].loc[df_copy['State']==lf] = 'other'
-   
+        
+    freq_specialty = df['Specialty'].value_counts()
+    least_frequent_sp=list(freq_specialty[freq_specialty<50].index)
+    for lf in least_frequent_sp:
+        df_copy['Specialty'].loc[df_copy['Specialty']==lf] = 'other'
+        
     #replace hyphens and spaces with periods to match the dataset
     opioids_names = list(re.sub(r'[-\s]','.',x) for x in opioids.values[:,0])
     #determe how many/ what opioids are mentioned in the data
@@ -111,6 +172,9 @@ if __name__=='__main__':
     #removing opioid prescriptions from the data, otherwise we'll be cheating!
     df_cols_no_opioids = [col for col in df_cols if not col in opioids_names]
     df_no_opioids = df_copy[df_cols_no_opioids]
+    #removing 0 columns
+    df_no_opioids = df_no_opioids.loc[:, (df_no_opioids != 0).any(axis=0)]
+    
     #factorizing categorical variables
     uniques = dict()
     Categorical=['Gender','State','Credentials','Specialty']
@@ -123,19 +187,21 @@ if __name__=='__main__':
     correlation_matrix(df_no_opioids.iloc[:,5:244])
     
     #split our dataset into train/test sets
+    X=np.array(df_no_opioids)[:,:244]
     y = df_no_opioids['Opioid.Prescriber']
-    X_train, X_test, y_train, y_test = train_test_split(np.array(df_no_opioids)[:,:244],
+    X_train, X_test, y_train, y_test = train_test_split(X,
                                 np.array(y), test_size = 0.2, random_state=42)    
     
     #trying out some classification models
-    """clf = RandomForestClassifier(n_estimators=50, min_samples_leaf=10, criterion ='entropy', 
+    clf = RandomForestClassifier(n_estimators=50, min_samples_leaf=10, criterion ='entropy', 
                                  random_state=42)
 #    clf.fit(X_train, y_train)
 #    y_pred = clf.predict(X_test)
-    
+    """
     param_grid = { 
-    'n_estimators': [100, 200, 500],
-    'min_samples_leaf': [10,20,50]
+    'n_estimators': [50, 100, 150],
+    'min_samples_leaf': [5,10,15],
+    'criterion': ['entropy', 'gini']
     }
     
     grid_search = GridSearchCV(estimator=clf, param_grid=param_grid, cv= 10)
@@ -145,10 +211,12 @@ if __name__=='__main__':
           % (time() - start, len(grid_search.grid_scores_)))
     print(grid_search.best_params_)#10/100
     """
-    opt_clf = RandomForestClassifier(n_estimators=100, min_samples_leaf=10, criterion ='entropy', 
-                                 random_state=42)
+    opt_clf = RandomForestClassifier(n_estimators=150, min_samples_leaf=5, 
+                                     criterion ='gini',  random_state=42)
     opt_clf.fit(X_train, y_train)
     y_pred = opt_clf.predict(X_test)
+    y_score = opt_clf.predict_proba(X_test)[:,1]
+    
     # Compute confusion matrix
     cnf_matrix = confusion_matrix(y_test, y_pred)
     np.set_printoptions(precision=2)
@@ -165,7 +233,27 @@ if __name__=='__main__':
                           title='Normalized confusion matrix')
     
     plt.show()
+    #precision-recall curve
+    average_precision = average_precision_score(y_test, y_score)
+    precision, recall, _ = precision_recall_curve(y_test, y_score)
+    plt.step(recall, precision, color='b', alpha=0.2,
+         where='post')
+    plt.fill_between(recall, precision, step='post', alpha=0.2,
+                     color='b')
     
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.0])
+    plt.title('Precision-Recall curve: AP={0:0.2f}'.format(
+              average_precision))
+    #learning curves
+    
+    title = "Learning Curves (Random Forest)"
+    estimator = RandomForestClassifier(n_estimators=150, min_samples_leaf=5, 
+                                     criterion ='gini',  random_state=42)
+    plot_learning_curve(estimator, title, X, y, ylim=(0.7, 1.01), cv=10)
+
     #compute AUC score
     auc_score = roc_auc_score(y_test, y_pred)
     print("AUC score: %.2f"%auc_score)
@@ -174,7 +262,7 @@ if __name__=='__main__':
     bal_accuracy1 =recall_score(y_test,y_pred, average='macro')
     mean_acc_score = accuracy_score(y_test,y_pred)
     
-    fpr1, tpr1, thresholds1 = roc_curve(y_test, opt_clf.predict_proba(X_test)[:,1])
+    fpr1, tpr1, thresholds1 = roc_curve(y_test, y_score)
    
     #PLOT ROC curve
     plt.title('Receiver Operating Characteristic')
@@ -189,6 +277,14 @@ if __name__=='__main__':
     
     #analyzing feature importance
     feature_import = opt_clf.feature_importances_
-    feature_import = np.c_[np.array(df_cols_no_opioids)[:244],feature_import]
-    feature_import = np.sort(feature_import, 0)
+    FI = pd.DataFrame()
+    FI['Feature']= list(df_no_opioids.columns)[:244]
+    FI['Importance'] = feature_import
+    FI.sort(columns='Importance', ascending=False, inplace=True)
+    sns.barplot(FI['Feature'].iloc[:50], FI['Importance'].iloc[:50], color='r')
+    plt.title('50 most important features according to RandomForestClassifier')
+    plt.xlabel('Feature')
+    plt.xticks(rotation=70)
+    plt.ylabel('Feature Importance')
+    
     
