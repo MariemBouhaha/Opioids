@@ -64,15 +64,19 @@ def read_as_df(basename, type="train"):
     solution_file = basename + '_' + type + '.solution'
     if isfile(solution_file):
         Y = pd.read_csv(solution_file, sep=' ', names = np.ravel(label_name))
-        [patnum2, classnum] = Y.shape
+        [patnum2, labelnum] = Y.shape
         assert(patnum==patnum2)
-        print('Number of classes = %d' % classnum)
+        print('Number of labels = %d' % labelnum)
         # Here we add the target values as a last column, this is convenient to use seaborn
         # Look at http://seaborn.pydata.org/tutorial/axis_grids.html for other ideas
-        label_range = np.arange(classnum).transpose()         # This is just a column vector [[0], [1], [2]]
-        numerical_target = Y.dot(label_range)                 # This is a column vector of dim patnum with numerical categories
-        nominal_target = pd.Series(np.array(label_name)[numerical_target].ravel()) # Same with nominal categories
-        XY = X.assign(target=nominal_target.values)          # Add the last column
+        if labelnum>1:
+            label_range = np.arange(labelnum).transpose()         # This is just a column vector [[0], [1], [2]]
+            numerical_target = Y.dot(label_range)                 # This is a column vector of dim patnum with numerical categories
+            nominal_target = pd.Series(np.array(label_name)[numerical_target].ravel()) # Same with nominal categories
+            XY = X.assign(target=nominal_target.values)          # Add the last column
+        else:
+            XY = X.assign(target=Y)
+            XY.columns.values[-1]=np.ravel(label_name)[0]
     
     return XY
     

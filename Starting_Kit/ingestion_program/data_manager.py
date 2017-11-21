@@ -53,7 +53,7 @@ class DataManager:
 		Get the kind of problem ('binary.classification', 'multiclass.classification', 'multilabel.classification', 'regression'), using the solution file given.
 	'''
 	
-	def __init__(self, basename="", input_dir="", verbose=False, replace_missing=True, filter_features=False, max_samples=float('inf')):
+	def __init__(self, basename="", input_dir="", verbose=False, replace_missing=True, filter_features=False, max_samples=float('inf'), conv_to_num=True):
 		'''Constructor'''
 		self.use_pickle = False # Turn this to true to save data as pickle (inefficient)
 		self.basename = basename
@@ -76,7 +76,7 @@ class DataManager:
 		self.data = {}  
   		#if True: return
 		Xtr = self.loadData (os.path.join(self.input_dir, basename + '_train.data'), verbose=verbose, replace_missing=replace_missing)
-		Ytr = self.loadLabel (os.path.join(self.input_dir, basename + '_train.solution'), verbose=verbose)
+		Ytr = self.loadLabel (os.path.join(self.input_dir, basename + '_train.solution'), verbose=verbose, conv_to_num=conv_to_num)
 		max_samples = min(Xtr.shape[0], max_samples)             
 		Xtr = Xtr[0:max_samples]
 		Ytr = Ytr[0:max_samples]
@@ -145,7 +145,7 @@ class DataManager:
 		if verbose:  print( "[+] Success in %5.2f sec" % (end - start))
 		return data
 	
-	def loadLabel (self, filename, verbose=True):
+	def loadLabel (self, filename, verbose=True, conv_to_num=True):
 		''' Get the solution/truth values'''
 		if verbose:  print("========= Reading " + filename)
 		start = time.time()
@@ -161,8 +161,9 @@ class DataManager:
 			label = data_io.data(filename)
 		elif self.info['task'] == 'multiclass.classification':
 			label = data_io.data(filename)
-            # IG: I changed that because it was too confusing.
-            #label = data_converter.convert_to_num(data_io.data(filename))              
+            # IG: I changed that because it was too confusing. Now we can also get the 1-hot encoded labels
+			if conv_to_num:
+				label = data_converter.convert_to_num(data_io.data(filename))              
 		else:
 			label = np.ravel(data_io.data(filename)) # get a column vector
 			#label = np.array([np.ravel(data_io.data(filename))]).transpose() # get a column vector
