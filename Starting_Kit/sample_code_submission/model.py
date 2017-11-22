@@ -21,7 +21,7 @@ class model:
         self.num_feat=1
         self.num_labels=1
         self.is_trained=False
-        self.y_fit
+        self.mymodel=GaussianNB()
 
     def fit(self, X, y):
         '''
@@ -37,7 +37,6 @@ class model:
         Use data_converter.convert_to_num() to convert to the category number format.
         For regression, labels are continuous values.
         '''
-        gnb = GaussianNB()
         self.num_train_samples = len(X)
         if X.ndim>1: self.num_feat = len(X[0])
         print("FIT: dim(X)= [{:d}, {:d}]").format(self.num_train_samples, self.num_feat)
@@ -47,7 +46,7 @@ class model:
         if (self.num_train_samples != num_train_samples):
             print("ARRGH: number of samples in X and y do not match!")
         else:
-            self.y_fit=gnb.fit(X, y)
+            self.mymodel = self.mymodel.fit(X, y)
             self.is_trained=True
 
     def predict(self, X):
@@ -68,7 +67,7 @@ class model:
         if (self.num_feat != num_feat):
             print("ARRGH: number of features in X does not match training data!")
         print("PREDICT: dim(y)= [{:d}, {:d}]").format(num_test_samples, self.num_labels)
-        y = self.y_fit.predict(X)
+        y = self.mymodel.predict_proba(X)[:,1]
         return y
 
     def save(self, path="./"):
